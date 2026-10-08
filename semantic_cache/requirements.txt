@@ -1,0 +1,12 @@
+redis
+numpy
+sentence-transformers
+fastapi
+uvicorn
+openai
+transformers
+pydantic
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0
+accelerate
+requests

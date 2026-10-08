@@ -1,0 +1,106 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${HF_CACHE_PATH}:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - VLLM_WSL2_ENABLE_PIN_MEMORY=1
+    ports:
+      - "8000:8000"
+    ipc: host
+    command: >
+      --model ${MODEL_NAME}
+      --gpu-memory-utilization 0.75
+      --trust-remote-code
+      --max-model-len 2048
+      --enforce-eager
+    #  --speculative-config '{"model": "RedHatAI/Qwen3-8B-speculator.eagle3", "method": "eagle3", "num_speculative_tokens": 5}'
+
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:main-latest
+    depends_on:
+      - vllm
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    ports:
+      - "4000:4000"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  semantic-cache:
+    build: ./semantic_cache
+    depends_on:
+      - redis
+    volumes:
+      - ${HF_CACHE_PATH}:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HUB_DOWNLOAD_TIMEOUT=60
+    ports:
+      - "8090:8090"
+
+  tools:
+    build: ./Agentic_tools
+    environment:
+      - SERP_API=${SERP_API}
+    ports:
+      - "8095:8095"
+
+  router_app:
+    build: ./router_app
+    depends_on:
+      - litellm-proxy
+      - semantic-cache
+      - tools
+    volumes:
+      - ${HF_CACHE_PATH}:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HUB_DOWNLOAD_TIMEOUT=60
+    ports:
+      - "8080:8080"
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./Observability/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+
+  nvidia-exporter:
+    image: nvidia/dcgm-exporter:latest
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "9835:9400"
+
+volumes:
+  redis_data:

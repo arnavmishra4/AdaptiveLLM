@@ -1,0 +1,25 @@
+model_list:
+  - model_name: cloud-glm
+    litellm_params:
+      model: openai/zai-org/GLM-5.3:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_TOKEN
+      tpm: 100000
+      rpm: 1000
+  - model_name: local-model
+    litellm_params:
+      model: openai/Qwen/Qwen2.5-1.5B-Instruct
+      api_base: http://vllm:8000/v1
+      api_key: dummy
+
+router_settings:
+  fallbacks:
+    - {"cloud-glm": ["local-model"]}
+    - {"local-model": ["cloud-glm"]}
+
+litellm_settings:
+  max_parallel_requests: 100
+  callbacks: ["prometheus"]
+
+general_settings:
+  master_key: sk-12112002
